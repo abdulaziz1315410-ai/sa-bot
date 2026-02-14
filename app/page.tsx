@@ -5,13 +5,20 @@ import { useEffect, useRef, useState } from "react";
 
 type Msg = { from: "user" | "bot"; text: string };
 
+const QUICK_PROMPTS = [
+  "I keep overthinking before I sleep. Give me a 3-step plan for tonight.",
+  "I replay conversations in my head. How do I stop the loop?",
+  "I’m stuck between two decisions and can’t choose. Help me decide logically.",
+  "I fear the worst outcome even with no evidence. What should I do?",
+];
+
 export default function Home() {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
 
-  // ✅ أول رسالة ترحيب (شكل احترافي للعرض)
+  // Welcome message
   useEffect(() => {
     if (messages.length === 0) {
       setMessages([
@@ -30,20 +37,22 @@ export default function Home() {
     boxRef.current?.scrollTo({ top: boxRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, loading]);
 
-  const handleSend = async () => {
-    const text = input.trim();
-    if (!text || loading) return;
+  const sendMessage = async (text: string) => {
+    const clean = text.trim();
+    if (!clean || loading) return;
 
-    setInput("");
     setLoading(true);
-
-    setMessages((prev) => [...prev, { from: "user", text }]);
+    setMessages((prev) => [...prev, { from: "user", text: clean }]);
+    setInput("");
 
     try {
+      // نرسل كل الرسائل (الواجهة تحفظها) عشان يصير فيه ذاكرة
+      const payloadMessages = [...messages, { from: "user" as const, text: clean }];
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ messages: payloadMessages }),
       });
 
       const data = (await res.json()) as { reply?: string; error?: string };
@@ -51,10 +60,13 @@ export default function Home() {
       if (!res.ok) {
         setMessages((prev) => [
           ...prev,
-          { from: "bot", text: data.error || `Server error (${res.status}).` },
+          { from: "bot", text: data.error || data.reply || `Server error (${res.status}).` },
         ]);
       } else {
-        setMessages((prev) => [...prev, { from: "bot", text: data.reply ?? "No reply." }]);
+        setMessages((prev) => [
+          ...prev,
+          { from: "bot", text: data.reply ?? "No reply." },
+        ]);
       }
     } catch {
       setMessages((prev) => [...prev, { from: "bot", text: "Server error. Check server logs." }]);
@@ -63,9 +75,22 @@ export default function Home() {
     }
   };
 
+  const handleSend = () => sendMessage(input);
+
+  const clearChat = () => {
+    setMessages([
+      {
+        from: "bot",
+        text:
+          "Hi. I’m Abdulaziz’s Overthinking Assistant.\n\nTell me what you’re overthinking about, and I’ll help you organize it into clear steps.",
+      },
+    ]);
+    setInput("");
+  };
+
   return (
     <main className="min-h-screen text-zinc-100">
-      {/* خلفية جامدة */}
+      {/* خلفية */}
       <div className="fixed inset-0 -z-10 bg-zinc-950" />
       <div className="fixed inset-0 -z-10 bg-[radial-gradient(800px_circle_at_20%_10%,rgba(99,102,241,0.18),transparent_55%),radial-gradient(900px_circle_at_80%_30%,rgba(168,85,247,0.16),transparent_60%),radial-gradient(900px_circle_at_50%_85%,rgba(34,211,238,0.12),transparent_55%)]" />
 
@@ -73,8 +98,7 @@ export default function Home() {
         {/* Header */}
         <div className="flex items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-4">
-            {/* ✅ تكبير اللوغو: غير h/w هنا */}
-            <div className="h-20 w-20 md:h-30 md:w-30 rounded-2xl overflow-hidden border border-white/10 bg-white/5 shadow-[0_0_0_1px_rgba(255,255,255,0.06)]">
+            <div className="h-20 w-20 rounded-2xl overflow-hidden border border-white/10 bg-white/5 shadow-[0_0_0_1px_rgba(255,255,255,0.06)]">
               <Image
                 src="/logo.jpeg"
                 alt="Logo"
@@ -93,7 +117,6 @@ export default function Home() {
                 Abdulaziz’s private assistant — specialized in overthinking only
               </p>
 
-              {/* Badge صغيرة احترافية */}
               <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-zinc-200/90">
                 <span className="h-2 w-2 rounded-full bg-emerald-400" />
                 Live demo
@@ -101,27 +124,42 @@ export default function Home() {
             </div>
           </div>
 
-          {/* زر صغير للعرض */}
           <div className="hidden md:flex items-center gap-2">
-            <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-zinc-200/90">
-              Ask in English ✅
-            </div>
+            <button
+              onClick={clearChat}
+              className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-zinc-200/90 hover:bg-white/10 transition"
+            >
+              Clear chat
+            </button>
           </div>
+        </div>
+
+        {/* Quick prompts */}
+        <div className="mb-4 flex flex-wrap gap-2">
+          {QUICK_PROMPTS.map((p) => (
+            <button
+              key={p}
+              onClick={() => sendMessage(p)}
+              disabled={loading}
+              className="text-left rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 px-4 py-2 text-sm text-zinc-200/90 transition disabled:opacity-60"
+              title="Send prompt"
+            >
+              {p}
+            </button>
+          ))}
         </div>
 
         {/* Chat card */}
         <div className="rounded-3xl border border-white/10 bg-white/5 shadow-[0_20px_80px_rgba(0,0,0,0.55)] backdrop-blur-xl">
-          {/* Top bar */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
             <div className="text-sm text-zinc-200/90">
-              Focus: Overthinking → clarity → steps
+              Context memory: last 12 messages
             </div>
             <div className="text-xs text-zinc-300/70">
-              If asked outside scope → “I only handle overthinking.”
+              English only • Overthinking only
             </div>
           </div>
 
-          {/* Messages */}
           <div
             ref={boxRef}
             className="h-[520px] overflow-y-auto px-4 md:px-6 py-5 space-y-3"
@@ -147,24 +185,23 @@ export default function Home() {
               );
             })}
 
-            {loading && (
-              <div className="text-zinc-300/70 text-sm">
-                Bot is typing…
-              </div>
-            )}
+            {loading && <div className="text-zinc-300/70 text-sm">Bot is typing…</div>}
           </div>
 
-          {/* Input */}
           <div className="p-4 md:p-5 border-t border-white/10">
             <div className="flex gap-2">
-              <input
+              <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") handleSend();
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
                 }}
-                className="flex-1 rounded-2xl border border-white/10 bg-zinc-950/40 px-4 py-3 outline-none placeholder:text-zinc-400/70 focus:border-white/20"
-                placeholder="Type what you’re overthinking about…"
+                rows={2}
+                className="flex-1 resize-none rounded-2xl border border-white/10 bg-zinc-950/40 px-4 py-3 outline-none placeholder:text-zinc-400/70 focus:border-white/20"
+                placeholder="Type what you’re overthinking about… (Enter to send, Shift+Enter for new line)"
               />
               <button
                 onClick={handleSend}
@@ -175,13 +212,18 @@ export default function Home() {
               </button>
             </div>
 
-            <div className="mt-2 text-xs text-zinc-300/60">
-              Tip: Start with “I keep thinking about…” then paste the situation.
+            <div className="mt-2 text-xs text-zinc-300/60 flex items-center justify-between">
+              <span>Tip: Start with “I keep thinking about…” then paste the situation.</span>
+              <button
+                onClick={clearChat}
+                className="md:hidden underline text-zinc-200/80 hover:text-zinc-100"
+              >
+                Clear
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Footer صغير */}
         <div className="mt-6 text-xs text-zinc-300/50">
           Demo build • Next.js + Groq • Private assistant for Abdulaziz
         </div>

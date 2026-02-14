@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 
+type ClientMsg = { from: "user" | "bot"; text: string };
+
 export async function POST(req: Request) {
   try {
-    const { message } = await req.json();
+    const { messages } = (await req.json()) as { messages?: ClientMsg[] };
 
     const apiKey = process.env.GROQ_API_KEY;
     const model = process.env.GROQ_MODEL || "llama-3.1-8b-instant";
@@ -12,6 +14,10 @@ export async function POST(req: Request) {
         { reply: "Server misconfigured: GROQ_API_KEY missing." },
         { status: 500 }
       );
+    }
+
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return NextResponse.json({ reply: "No messages provided." }, { status: 400 });
     }
 
     const system = `
@@ -24,7 +30,19 @@ Rules:
 - Give practical, step-by-step guidance.
 - Be calm and logical. Be direct if the user is catastrophizing.
 - Do not give medical diagnoses or dangerous medical advice.
-`;
+- Keep answers concise and actionable.
+`.trim();
+
+    // خذ آخر 12 رسالة فقط (ذاكرة قصيرة مناسبة)
+    const last = messages.slice(-12);
+
+    const groqMessages = [
+      { role: "system", content: system },
+      ...last.map((m) => ({
+        role: m.from === "user" ? "user" : "assistant",
+        content: m.text,
+      })),
+    ];
 
     const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
@@ -35,17 +53,15 @@ Rules:
       body: JSON.stringify({
         model,
         temperature: 0.4,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: String(message ?? "") },
-        ],
+        max_tokens: 500,
+        messages: groqMessages,
       }),
     });
 
     const json = await r.json();
 
     if (!r.ok) {
-      console.log("GROQ ERROR:", r.status, json); // مهم جداً للتشخيص
+      console.log("GROQ ERROR:", r.status, json);
       return NextResponse.json(
         { reply: `Model error (${r.status}). Check server logs.` },
         { status: 500 }
