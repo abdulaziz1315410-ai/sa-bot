@@ -18,41 +18,42 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
 
+  const WELCOME: Msg = {
+    from: "bot",
+    text:
+      "Hi. I’m Abdulaziz’s Overthinking Assistant.\n\nTell me what you’re overthinking about, and I’ll help you organize it into clear steps.",
+  };
+
   // Welcome message
   useEffect(() => {
-    if (messages.length === 0) {
-      setMessages([
-        {
-          from: "bot",
-          text:
-            "Hi. I’m Abdulaziz’s Overthinking Assistant.\n\nTell me what you’re overthinking about, and I’ll help you organize it into clear steps.",
-        },
-      ]);
-    }
+    if (messages.length === 0) setMessages([WELCOME]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Auto scroll
   useEffect(() => {
-    boxRef.current?.scrollTo({ top: boxRef.current.scrollHeight, behavior: "smooth" });
+    boxRef.current?.scrollTo({
+      top: boxRef.current.scrollHeight,
+      behavior: "smooth",
+    });
   }, [messages, loading]);
 
   const sendMessage = async (text: string) => {
     const clean = text.trim();
     if (!clean || loading) return;
 
-    setLoading(true);
-    setMessages((prev) => [...prev, { from: "user", text: clean }]);
+    // ✅ المهم: نبني الرسائل الجديدة مرة وحدة ونستخدمها للواجهة + للـ API
+    const nextMessages: Msg[] = [...messages, { from: "user", text: clean }];
+
     setInput("");
+    setLoading(true);
+    setMessages(nextMessages);
 
     try {
-      // نرسل كل الرسائل (الواجهة تحفظها) عشان يصير فيه ذاكرة
-      const payloadMessages = [...messages, { from: "user" as const, text: clean }];
-
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: payloadMessages }),
+        body: JSON.stringify({ messages: nextMessages }),
       });
 
       const data = (await res.json()) as { reply?: string; error?: string };
@@ -60,16 +61,23 @@ export default function Home() {
       if (!res.ok) {
         setMessages((prev) => [
           ...prev,
-          { from: "bot", text: data.error || data.reply || `Server error (${res.status}).` },
+          {
+            from: "bot",
+            text: data.error || data.reply || `Server error (${res.status}).`,
+          },
         ]);
-      } else {
-        setMessages((prev) => [
-          ...prev,
-          { from: "bot", text: data.reply ?? "No reply." },
-        ]);
+        return;
       }
+
+      setMessages((prev) => [
+        ...prev,
+        { from: "bot", text: data.reply ?? "No reply." },
+      ]);
     } catch {
-      setMessages((prev) => [...prev, { from: "bot", text: "Server error. Check server logs." }]);
+      setMessages((prev) => [
+        ...prev,
+        { from: "bot", text: "Server error. Check server logs." },
+      ]);
     } finally {
       setLoading(false);
     }
@@ -78,19 +86,13 @@ export default function Home() {
   const handleSend = () => sendMessage(input);
 
   const clearChat = () => {
-    setMessages([
-      {
-        from: "bot",
-        text:
-          "Hi. I’m Abdulaziz’s Overthinking Assistant.\n\nTell me what you’re overthinking about, and I’ll help you organize it into clear steps.",
-      },
-    ]);
+    setMessages([WELCOME]);
     setInput("");
   };
 
   return (
     <main className="min-h-screen text-zinc-100">
-      {/* خلفية */}
+      {/* Background */}
       <div className="fixed inset-0 -z-10 bg-zinc-950" />
       <div className="fixed inset-0 -z-10 bg-[radial-gradient(800px_circle_at_20%_10%,rgba(99,102,241,0.18),transparent_55%),radial-gradient(900px_circle_at_80%_30%,rgba(168,85,247,0.16),transparent_60%),radial-gradient(900px_circle_at_50%_85%,rgba(34,211,238,0.12),transparent_55%)]" />
 
@@ -167,7 +169,10 @@ export default function Home() {
             {messages.map((m, i) => {
               const isUser = m.from === "user";
               return (
-                <div key={i} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+                <div
+                  key={i}
+                  className={`flex ${isUser ? "justify-end" : "justify-start"}`}
+                >
                   <div
                     className={[
                       "max-w-[88%] rounded-2xl px-4 py-3 border text-sm leading-relaxed",
@@ -185,7 +190,9 @@ export default function Home() {
               );
             })}
 
-            {loading && <div className="text-zinc-300/70 text-sm">Bot is typing…</div>}
+            {loading && (
+              <div className="text-zinc-300/70 text-sm">Bot is typing…</div>
+            )}
           </div>
 
           <div className="p-4 md:p-5 border-t border-white/10">
@@ -213,7 +220,9 @@ export default function Home() {
             </div>
 
             <div className="mt-2 text-xs text-zinc-300/60 flex items-center justify-between">
-              <span>Tip: Start with “I keep thinking about…” then paste the situation.</span>
+              <span>
+                Tip: Start with “I keep thinking about…” then paste the situation.
+              </span>
               <button
                 onClick={clearChat}
                 className="md:hidden underline text-zinc-200/80 hover:text-zinc-100"
